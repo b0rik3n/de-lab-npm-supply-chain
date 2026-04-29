@@ -1,41 +1,61 @@
 # Student Handout: Detection Engineering Practical (Splunk + Elastic)
 
+## Lab title
+Cross-Platform Detection Engineering, npm Supply-Chain Compromise
+
 ## What you are doing
-You will investigate a simulated npm supply-chain compromise and build equivalent detections in:
+You will investigate a simulated software supply-chain incident and build equivalent detections in two ecosystems:
 - **Splunk (SPL)**
 - **Elastic (Kibana + ES|QL)**
 
-Your goal is to detect the activity, tune your logic, and explain platform tradeoffs.
+You are not only trying to “find bad.” You are practicing how to:
+1. Build detection logic from incident evidence.
+2. Tune to reduce noise.
+3. Correlate multi-source telemetry.
+4. Explain tradeoffs between detection platforms.
 
 ---
 
 ## Scenario summary
-Compromised packages were installed, followed by suspicious script execution, outbound C2 traffic, and persistence artifacts.
+Compromised npm package versions were installed on developer endpoints. Those installs triggered suspicious script execution, outbound command-and-control (C2) traffic, and persistence artifacts across Windows, Linux, and macOS.
 
 ### Known IOCs for this lab
 - Domain: `sfrclak.com`
 - IP: `142.11.206.73`
 - URL: `http://sfrclak.com:8000/6202033`
-- Packages: `axios@1.14.1`, `axios@0.30.4`, `plain-crypto-js@4.2.1`
-- Artifacts:
+- Packages:
+  - `axios@1.14.1`
+  - `axios@0.30.4`
+  - `plain-crypto-js@4.2.1`
+- Host artifacts:
   - macOS: `/Library/Caches/com.apple.act.mond`
   - Windows: `%PROGRAMDATA%\wt.exe`, `%TEMP%\6202033.vbs`, `%TEMP%\6202033.ps1`
   - Linux: `/tmp/ld.py`
 
 ---
 
-## Required deliverables (submit all)
-1. IOC detections in SPL and ES|QL
-2. Behavioral detections in SPL and ES|QL
-3. Correlation detection in SPL and ES|QL
-4. Kibana evidence (Discover notes/screenshots + rule setup)
-5. 1-page comparison: SPL vs ES|QL (precision, performance, maintainability)
-6. ATT&CK mapping table
+## Learning outcomes
+By the end of lab, you should be able to:
+- Translate threat intelligence into query logic.
+- Hunt IOCs and behavior in both SPL and ES|QL.
+- Build correlation detections with a defensible time window.
+- Produce investigation evidence in Kibana Discover.
+- Explain why two equivalent detections can differ in fidelity.
 
 ---
 
-## Real threat intel references (with IOC-rich reporting)
-Use these for enrichment and ATT&CK justification in your write-up.
+## Required deliverables (submit all)
+1. IOC detections in SPL and ES|QL.
+2. Behavioral detections in SPL and ES|QL.
+3. Correlation detections in SPL and ES|QL.
+4. Kibana evidence (Discover notes/screenshots + rule setup summary).
+5. One-page SPL vs ES|QL comparison (precision, performance, maintainability).
+6. ATT&CK mapping table.
+
+---
+
+## Real threat intel references (for enrichment)
+Use these references for ATT&CK mapping, reasoning, and triage context.
 
 - Unit 42, axios supply chain attack:
   - https://unit42.paloaltonetworks.com/axios-supply-chain-attack/
@@ -50,218 +70,317 @@ Use these for enrichment and ATT&CK justification in your write-up.
 - Volexity, Exchange exploitation case study:
   - https://www.volexity.com/blog/2021/03/02/active-exploitation-of-microsoft-exchange-zero-day-vulnerabilities/
 
-Note: these sources are for context and mapping, not required to exactly match this synthetic dataset.
+Note: these references provide authentic reporting patterns and IOC structure. Your synthetic lab data will not match every detail.
+
+---
+
+## Before you begin (5 minutes)
+1. Confirm your Splunk time range covers event timestamps.
+2. Confirm Kibana index pattern points to your demo data.
+3. Open these files side-by-side:
+   - `splunk/starter-queries.spl`
+   - `elastic/esql/starter-queries.esql`
+   - `kibana/checklist.md`
+4. Create a lab notes document.
+
+In your notes, create section headers now:
+- Field mapping
+- IOC results
+- Behavioral results
+- Correlation results
+- Kibana evidence
+- ATT&CK mapping
+- SPL vs ES|QL comparison
 
 ---
 
 ## Step-by-step workflow
 
-## Step 1: Open your materials
-1. Open `splunk/starter-queries.spl`
-2. Open `elastic/esql/starter-queries.esql`
-3. Open `kibana/checklist.md`
-4. Create a notes doc for answers and evidence
+## Step 1: Data familiarization and field mapping
 
-Output to capture:
-- Student name/team
-- Date/time
-- Environment names (Splunk instance + Kibana space)
+### Goal
+Understand where equivalent data lives in each platform.
 
----
-
-## Step 2: Data familiarization (both platforms)
-
-### 2A) Splunk
-1. Search broad sample data:
+### Splunk actions
+1. Run:
    - `index=detection_demo | head 50`
-2. Identify core fields used for detection:
-   - host/user/process/network/file/package fields
+2. Identify fields needed for your detections:
+   - host/user/process/file/network/package
 
-### 2B) Kibana Discover
-1. Open the detection demo index pattern
-2. Inspect sample events and ECS field names
+### Elastic/Kibana actions
+1. Open Discover.
+2. Filter to lab index pattern (e.g., `detection_demo_*`).
+3. Inspect ECS fields and sample values.
 
-### 2C) Build your field mapping table
-Create a small table in your notes:
+### Build your field crosswalk
+At minimum map:
 - `host` ↔ `host.name`
 - `user` ↔ `user.name`
+- `process_name` ↔ `process.name`
 - `process_commandline` ↔ `process.command_line`
 - `file_path` ↔ `file.path`
-- `domain/ip/url` ↔ `domain/destination.ip/url.full`
-- `package_name/package_version` ↔ `package.name/package.version`
+- `domain` ↔ `domain`
+- `destination_ip`/`ip` ↔ `destination.ip`
+- `package_name` ↔ `package.name`
+- `package_version` ↔ `package.version`
 
-Output to capture:
-- Field mapping table with at least 8 mapped fields
-
----
-
-## Step 3: IOC detections
-
-### 3A) Run IOC query in Splunk
-1. Run IOC starter query from `splunk/starter-queries.spl`
-2. Validate hits for domain/IP/URL/packages
-3. Record affected hosts and users
-
-### 3B) Run IOC query in ES|QL
-1. Run IOC query from `elastic/esql/starter-queries.esql`
-2. Confirm equivalent hits
-
-Output to capture:
-- First seen timestamp
-- Last seen timestamp
-- Distinct impacted hosts
-- Which IOC types matched
-
-Checkpoint question:
-- Are SPL and ES|QL results equivalent? If not, why?
+### What to record
+- 8+ mapped fields
+- Any null/optional fields you noticed
+- Any field normalization differences
 
 ---
 
-## Step 4: Behavioral detections
+## Step 2: IOC detections
 
-### 4A) Build behavior logic
-Detect this pattern:
-- package install/postinstall activity
-- interpreter execution (`powershell`, `wscript/cscript`, `python`, `osascript`, `zsh/bash/sh`)
+### Goal
+Find exact known-bad indicators quickly and accurately.
 
-### 4B) Splunk
-1. Run behavioral starter SPL
-2. Tune to reduce noise (add constraints by parent process, commandline substrings, host role, etc.)
-3. Document tuning choices
+### Splunk actions
+1. Run IOC starter query from `splunk/starter-queries.spl`.
+2. Verify matches for:
+   - domain, IP, URL, package@version
+3. Add summary stats:
+   - impacted hosts
+   - impacted users
+   - first seen / last seen
 
-### 4C) ES|QL
-1. Run behavioral ES|QL starter
-2. Apply equivalent tuning
-3. Compare false positives vs Splunk
+### ES|QL actions
+1. Run IOC query from `elastic/esql/starter-queries.esql`.
+2. Verify equivalent matches.
+3. Ensure output includes timestamp, host, IOC type.
 
-Output to capture:
-- Final behavioral query (both platforms)
-- Why each filter was added
-- Before/after result count
+### What to record
+- Distinct hosts with IOC hits
+- Distinct users with IOC hits
+- First and last timestamps
+- Which IOC types hit most often
 
----
-
-## Step 5: Persistence artifact detections
-
-### 5A) Splunk
-1. Run persistence artifact query
-2. Confirm OS-specific artifact paths
-
-### 5B) ES|QL
-1. Run persistence artifact query
-2. Confirm equivalent findings
-
-Output to capture:
-- Artifact path
-- Host/user/process
-- Timestamp
+### Validation question
+Do SPL and ES|QL return the same logical incidents? If not, explain exactly why (field mismatch, data type, parser behavior, null handling, etc.).
 
 ---
 
-## Step 6: Correlation detection (high-confidence)
+## Step 3: Behavioral detections
 
-Goal: Detect where all 3 occur within the same time window:
+### Goal
+Move beyond “known bad” and detect suspicious execution patterns.
+
+### Detection pattern to model
+- Package install/postinstall context
+- Script or interpreter execution:
+  - `powershell`, `wscript/cscript`, `python`, `osascript`, `zsh/bash/sh`
+- Suspicious command-line fragments:
+  - `ExecutionPolicy Bypass`, `setup.js`, known dropper paths
+
+### Splunk actions
+1. Run behavioral starter query.
+2. Tune to improve precision, for example:
+   - parent process constraints (`npm`, package managers)
+   - commandline contains both install context + execution flags
+   - host scope (developer endpoints only)
+3. Capture before/after counts.
+
+### ES|QL actions
+1. Run behavioral starter query.
+2. Apply equivalent filters in ES|QL.
+3. Re-check output quality and document differences.
+
+### What to record
+- Final behavioral query in both languages
+- Tuning changes you made and why
+- Before/after result volume
+- Observed false positives and how you reduced them
+
+---
+
+## Step 4: Persistence artifact detections
+
+### Goal
+Detect host-level artifacts consistent with post-exploitation persistence.
+
+### Splunk actions
+1. Run artifact query from starter pack.
+2. Confirm host artifacts by OS/path.
+
+### ES|QL actions
+1. Run equivalent artifact query.
+2. Confirm same host/path timeline.
+
+### What to record
+- Host
+- User
+- Process
+- File path
+- Event timestamp
+
+### Analyst note
+This step is high value for triage. IOC-only alerts can be noisy. Disk artifacts strengthen confidence.
+
+---
+
+## Step 5: Correlation detection (high confidence)
+
+### Goal
+Build logic that requires **all three** signals in a single window:
 1. Compromised package event
-2. Suspicious process execution
+2. Suspicious process event
 3. Outbound C2 event
 
-### 6A) Splunk
-1. Run correlation starter SPL (30m bucket)
-2. Confirm hosts with all three conditions
+### Recommended window
+Start with 30 minutes. Then test 15 and 60 minutes to observe sensitivity.
 
-### 6B) ES|QL
-1. Run correlation starter ES|QL
-2. Validate equivalent correlated hits
+### Splunk actions
+1. Run correlation starter SPL.
+2. Verify all three flags are present for the same host/window.
+3. Tune if needed.
 
-Output to capture:
-- Correlated host list
-- Window used (e.g., 30m)
+### ES|QL actions
+1. Run correlation starter ES|QL.
+2. Validate equivalent host/window hits.
+3. Compare result counts with SPL.
+
+### What to record
+- Final correlated host list
+- Time window used
 - Why this is high confidence
+- What changed when window size changed
 
-Checkpoint question:
-- What breaks if the window is too small or too large?
-
----
-
-## Step 7: Kibana practical tasks
-
-Use `kibana/checklist.md` and complete every checkbox.
-
-Minimum required:
-1. Discover pivot workflow notes:
-   - package event → process event → network event
-2. ES|QL hunt results saved/exported
-3. 3 Elastic Security rules created:
-   - IOC rule
-   - behavioral rule
-   - correlation rule
-4. Visual evidence:
-   - timeline by host
-   - top suspicious processes
-   - destination domain/IP chart
-   - file artifacts by OS
-
-Output to capture:
-- Screenshots or exported results
-- Rule names, severities, and short triage guidance
+### Validation question
+What fails when the window is too tight? What noise appears when it is too wide?
 
 ---
 
-## Step 8: ATT&CK mapping
-Map your detections to ATT&CK techniques in a table.
+## Step 6: Kibana practical execution
 
-Template:
-| Detection | Data source | ATT&CK tactic | ATT&CK technique | Why |
+Use `kibana/checklist.md`. Every box should be completed.
+
+### Required work
+1. **Discover pivot notes**
+   - Start at package event.
+   - Pivot to process execution on same host.
+   - Pivot to network C2 activity in nearby time.
+2. **ES|QL hunt evidence**
+   - Save or export IOC, behavior, and correlation outputs.
+3. **Elastic Security rule setup**
+   - IOC rule (low/medium)
+   - Behavioral rule (medium/high)
+   - Correlation rule (high)
+4. **Visual evidence**
+   - Timeline by host
+   - Top suspicious processes
+   - Destination domain/IP chart
+   - Artifact-by-OS chart
+
+### What to record
+- Rule names
+- Rule severity/priority
+- Rule scheduling interval
+- Triage notes or investigation guide text
+
+---
+
+## Step 7: ATT&CK mapping
+
+### Goal
+Map each meaningful detection to ATT&CK tactics/techniques.
+
+Use this template:
+
+| Detection | Data source | ATT&CK tactic | ATT&CK technique | Why this mapping fits |
 |---|---|---|---|---|
-| IOC domain/IP | DNS/Proxy | Command and Control | T1071 (or appropriate) | Outbound to known C2 |
+| IOC domain/IP hit | DNS/Proxy | Command and Control | T1071 (example) | Outbound comms to known C2 |
 
-Output to capture:
-- At least 4 detection-to-ATT&CK mappings
+### What to record
+- At least 4 mappings
+- One sentence rationale per mapping
 
----
-
-## Step 9: Platform comparison write-up (1 page)
-Answer clearly:
-1. Which platform gave faster query iteration and why?
-2. Which platform made correlation easier and why?
-3. Which query language was easier to maintain for this use case?
-4. What precision/false-positive differences did you observe?
-5. Final recommendation for production workflow
-
-Keep it evidence-based, not opinion-only.
+Tip: Avoid vague mappings. Tie each mapping to observed telemetry.
 
 ---
 
-## Step 10: Final submission checklist
-Before submitting, verify:
-- [ ] IOC queries completed in SPL + ES|QL
-- [ ] Behavioral queries completed in SPL + ES|QL
-- [ ] Correlation queries completed in SPL + ES|QL
-- [ ] Kibana checklist completed
-- [ ] ATT&CK table included
+## Step 8: SPL vs ES|QL comparison write-up (1 page)
+
+Answer these directly:
+1. Which platform was faster for iterative hunting and why?
+2. Which platform made correlation easier for this scenario and why?
+3. Which query language appears easier to maintain for your team?
+4. What precision differences did you observe?
+5. What performance differences did you observe?
+6. What is your production recommendation for this use case?
+
+### Write-up quality bar
+- Use evidence (result counts, fields, screenshots, query behavior).
+- Avoid generic statements like “it depends.”
+- Be specific about tradeoffs.
+
+---
+
+## Step 9: Final submission checklist
+
+Before you submit, verify:
+- [ ] IOC queries complete in SPL and ES|QL
+- [ ] Behavioral queries complete in SPL and ES|QL
+- [ ] Correlation queries complete in SPL and ES|QL
+- [ ] Kibana checklist complete
+- [ ] ATT&CK mapping table included
 - [ ] 1-page comparison included
-- [ ] Evidence attached (screenshots/results)
+- [ ] Evidence attached (screenshots/exports)
+- [ ] Queries are readable and commented
 
 ---
 
-## Time guidance
-- Step 1-2: 20 min
-- Step 3: 20 min
-- Step 4: 30 min
-- Step 5: 15 min
-- Step 6: 25 min
-- Step 7: 25 min
-- Step 8-9: 20 min
-- Step 10: 5 min
-
-Total: ~160 minutes (~2h 40m)
+## Recommended time plan (~2h 40m)
+- Setup + field mapping: 20 min
+- IOC detections: 20 min
+- Behavioral detections: 30 min
+- Artifact detections: 15 min
+- Correlation detections: 25 min
+- Kibana practical: 25 min
+- ATT&CK + write-up: 20 min
+- Final QA + submission: 5 min
 
 ---
 
-## Troubleshooting hints
-- No IOC hits? Recheck index/index pattern and time range.
-- Too many behavior hits? Add parent/child process constraints and commandline patterns.
-- Correlation empty? Expand window and verify each signal exists independently first.
-- SPL and ES|QL differ? Compare field names and null handling.
+## Troubleshooting guide
 
-Good luck. Treat this like a real incident. Clean logic wins.
+### Problem: No IOC hits
+- Confirm time range first.
+- Confirm index/index pattern.
+- Confirm field names are correct for your environment.
+
+### Problem: Too many behavior hits
+- Add parent process constraints.
+- Add commandline context requirements.
+- Scope to relevant host class.
+
+### Problem: Correlation query returns zero
+- Validate each signal independently first.
+- Increase window temporarily.
+- Check null handling and field availability.
+
+### Problem: SPL and ES|QL disagree
+- Compare schema mapping line-by-line.
+- Check case sensitivity and string matching operators.
+- Check how each platform handles missing fields.
+
+---
+
+## Submission format (recommended)
+- `queries/spl/*.spl`
+- `queries/esql/*.esql`
+- `evidence/*.png` or exported CSV/JSON
+- `report/comparison.md`
+- `report/attack-mapping.md`
+
+---
+
+## Final reminder
+Think like an analyst, not just a query writer.
+A strong submission shows:
+- correct logic,
+- deliberate tuning,
+- reproducible evidence,
+- and clear reasoning.
+
+Good luck. Treat this as a real SOC case.
