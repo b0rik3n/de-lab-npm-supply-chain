@@ -34,6 +34,16 @@ You are expected to show your reasoning at each step.
 A supply-chain compromise impacted npm package installs on developer endpoints.
 After install, suspicious script execution occurred, followed by outbound C2 traffic and host artifacts consistent with persistence.
 
+### Training aide, read these first (recommended)
+These two articles provide excellent context for why this lab matters and how analysts describe this attack pattern in real reporting:
+
+1. Unit 42, axios supply-chain attack
+   - https://unit42.paloaltonetworks.com/axios-supply-chain-attack/
+2. Koi Security research write-up (axios compromise)
+   - https://www.koi.ai/blog/axios-compromised-a-supply-chain-attack-on-npms-most-popular-http-client
+
+Tip: read these before writing your ATT&CK mappings and final comparison section.
+
 ### IOC set for this lab
 - Domain: `sfrclak.com`
 - IP: `142.11.206.73`
