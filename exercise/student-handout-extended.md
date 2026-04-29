@@ -1,6 +1,12 @@
 # Extended Student Handout
 ## Detection Engineering Practical, npm Supply-Chain Compromise
 
+## Beginner-friendly note
+This version is written for students who may be new to detection engineering, Splunk, Elastic, or SOC workflows.
+If a term feels unfamiliar, check the **Quick Glossary** section before continuing.
+
+---
+
 ## 1) Why this lab exists
 This lab is designed to train you to think like a detection engineer, not just a query author.
 
@@ -57,7 +63,51 @@ Optional bonus:
 
 ---
 
-## 5) Materials you must open first
+## 5) Quick Glossary (read this first)
+- **Detection engineering**: writing logic that finds suspicious or malicious activity in logs.
+- **IOC (Indicator of Compromise)**: a known bad value such as a domain, IP, hash, or malicious package version.
+- **Behavioral detection**: detection logic based on what something does, not just known bad values.
+- **Correlation**: combining multiple weak signals into one stronger alert.
+- **Telemetry**: logs/events collected from systems (endpoint, DNS, proxy, package manager, etc.).
+- **SPL**: Splunk Processing Language, used to query data in Splunk.
+- **ES|QL**: Elasticsearch Query Language, used to hunt and analyze data in Elastic.
+- **Kibana Discover**: Elastic interface for searching and pivoting through raw events.
+- **ECS**: Elastic Common Schema, standardized field naming in Elastic.
+- **ATT&CK**: MITRE ATT&CK framework used to map adversary behavior to known tactics/techniques.
+- **False positive**: alert that looks suspicious but is actually benign.
+- **Tuning**: adjusting logic to reduce false positives while keeping true detections.
+
+---
+
+## 6) Click-by-click startup (beginner mode)
+
+### Splunk startup
+1. Open Splunk in your browser.
+2. Click **Search & Reporting** app.
+3. At top-right, set time range to **All time** (or a range covering the lab timestamps).
+4. In the search bar, paste:
+   - `index=detection_demo | head 20`
+5. Press **Enter**.
+
+If data appears, Splunk is ready.
+
+### Kibana startup
+1. Open Kibana in your browser.
+2. Click menu icon (top-left) → **Analytics** → **Discover**.
+3. Select index pattern (for example `detection_demo_*`).
+4. Set time picker (top-right) to include all lab data.
+5. In KQL bar, use `*` and press **Refresh**.
+
+If rows appear, Kibana is ready.
+
+### If you see zero rows
+- Re-check time range first.
+- Confirm index name with instructor.
+- Click Refresh.
+
+---
+
+## 7) Materials you must open first
 - `splunk/starter-queries.spl`
 - `elastic/esql/starter-queries.esql`
 - `kibana/checklist.md`
@@ -76,7 +126,7 @@ Create a notebook or markdown notes file with these sections:
 
 ---
 
-## 6) Step-by-step workflow (very detailed)
+## 8) Step-by-step workflow (very detailed)
 
 ## Step 0, Environment validation
 ### Goal
@@ -87,6 +137,10 @@ Confirm your lab environment is correct before doing analysis.
 2. Confirm your Elastic index pattern resolves events (e.g., `detection_demo_*`).
 3. Set time range in both tools to include the event timestamps in the dataset.
 4. Test with a broad query in each platform.
+
+### Expected output
+- Splunk: table rows with fields like host, user, event type.
+- Kibana Discover: rows with `@timestamp` and ECS fields.
 
 ### Why this matters
 Most failed detections are not bad logic. They are wrong time range, wrong index, or field mismatch.
@@ -131,6 +185,9 @@ At minimum map:
 - `package_name` ↔ `package.name`
 - `package_version` ↔ `package.version`
 
+### Expected output
+A completed field mapping table with 8+ fields.
+
 ### Why this matters
 Detection parity fails when schema assumptions differ. Cross-platform mapping is foundational.
 
@@ -146,34 +203,31 @@ Detection parity fails when schema assumptions differ. Cross-platform mapping is
 Detect known indicators quickly and accurately in both stacks.
 
 ### Splunk actions
-1. Run IOC starter query from `splunk/starter-queries.spl`.
-2. Validate each IOC category independently:
-   - domain
-   - IP
-   - URL
-   - package@version
-3. Add summary stats for first seen / last seen / impacted hosts.
+1. Open `splunk/starter-queries.spl`.
+2. Copy IOC query block.
+3. Paste into Splunk search bar and run.
+4. Sort by time ascending if needed.
 
 ### ES|QL actions
-1. Run IOC starter query from `elastic/esql/starter-queries.esql`.
-2. Confirm equivalent results and fields.
-3. Ensure output includes timestamp and host context.
+1. In Kibana, open ES|QL query editor.
+2. Open `elastic/esql/starter-queries.esql`.
+3. Copy IOC query block and run.
 
-### Tuning guidance
-- Keep IOC rules strict, but preserve context fields for triage.
-- Avoid over-aggregation that hides event-level details.
+### Expected output
+You should see IOC matches for at least:
+- `sfrclak.com`
+- `142.11.206.73`
+- one or more compromised package versions
+
+### If expected output is missing
+- verify exact field names,
+- verify time range,
+- verify your index pattern includes network + package events.
 
 ### Record
 - distinct hosts/users impacted
 - first and last IOC event timestamps
 - IOC category hit counts
-
-### Validation prompt
-If SPL and ES|QL differ, identify exactly where:
-- field naming,
-- null handling,
-- case sensitivity,
-- parser behavior.
 
 ---
 
@@ -188,21 +242,19 @@ Build detections for:
 3. suspicious commandline fragments (`ExecutionPolicy Bypass`, `setup.js`, known dropper path patterns).
 
 ### Splunk actions
-1. Run starter behavioral query.
+1. Copy behavioral query from starter file and run.
 2. Tune in stages:
    - Stage A: broad behavior logic
    - Stage B: add parent-process constraints
    - Stage C: add commandline constraints
    - Stage D: remove obvious benign patterns
-3. Measure result volume after each stage.
 
 ### ES|QL actions
-1. Mirror the same staged logic in ES|QL.
-2. Keep parity with SPL intent.
-3. Compare output set and false positives.
+1. Run behavioral ES|QL starter query.
+2. Mirror SPL tuning intent.
 
-### Why this matters
-IOC detections break when indicators rotate. Behavioral logic is more resilient.
+### Expected output
+A smaller, cleaner result set showing likely malicious chains.
 
 ### Record
 - final SPL and ES|QL behavior queries
@@ -223,6 +275,9 @@ Find host artifacts that support a higher-confidence compromise story.
 1. Run corresponding ES|QL artifact query.
 2. Validate matching host and timeline.
 
+### Expected output
+Hits for one or more known artifact paths.
+
 ### Record
 For each hit:
 - timestamp
@@ -230,9 +285,6 @@ For each hit:
 - user
 - process
 - artifact path
-
-### Analyst interpretation
-Artifacts are high-value triage evidence. They strengthen confidence beyond single network or package events.
 
 ---
 
@@ -248,16 +300,14 @@ Start with 30 minutes. Then test 15 and 60 to observe detection sensitivity.
 
 ### Splunk actions
 1. Run starter correlation SPL.
-2. Verify all three conditions are present.
-3. Confirm host-level grouping and time bucket behavior.
+2. Verify all three conditions are present per host/time bucket.
 
 ### ES|QL actions
 1. Run starter correlation ES|QL.
 2. Confirm equivalent host/window results.
-3. Compare parity vs SPL.
 
-### Why this matters
-Correlation raises signal quality and reduces single-event false positives.
+### Expected output
+A short list of high-confidence hosts, not a huge list.
 
 ### Record
 - correlated host list
@@ -284,6 +334,16 @@ Demonstrate analyst workflow and operationalization in Elastic.
    - destination domain/IP chart
    - artifact distribution by OS
 
+### Beginner click path for rules
+1. Kibana menu → **Security** → **Rules**.
+2. Click **Create new rule**.
+3. Choose query-based rule type.
+4. Paste query.
+5. Set severity.
+6. Set schedule.
+7. Add investigation notes.
+8. Save.
+
 ### Record
 - rule names
 - severities
@@ -303,9 +363,8 @@ Use this template:
 |---|---|---|---|---|
 | C2 domain/IP detection | DNS/Proxy | Command and Control | T1071 (example) | Outbound comms to known C2 infrastructure |
 
-### Record
-- at least 4 mappings
-- one concrete rationale sentence per mapping
+### Expected output
+At least 4 completed rows with rationale.
 
 ---
 
@@ -341,7 +400,7 @@ Check each item:
 
 ---
 
-## 7) Recommended timeline
+## 9) Recommended timeline
 - Environment + schema mapping: 25 minutes
 - IOC detection: 20 minutes
 - Behavioral detection: 35 minutes
@@ -355,48 +414,31 @@ Total: ~3 hours 5 minutes
 
 ---
 
-## 8) Troubleshooting guide
+## 10) Troubleshooting quick actions
 
-### Issue: no results at all
-- Verify index/index pattern and time range first.
-- Confirm data was ingested.
+### If no data appears
+1. Expand time picker.
+2. Re-check index/index pattern.
+3. Ask instructor for exact dataset name.
 
-### Issue: IOC results in one platform only
-- Compare field names and exact value formatting.
-- Check null handling and string matching semantics.
+### If only one platform works
+1. Compare field names with your mapping table.
+2. Check missing/null fields.
+3. Verify query syntax is for the correct platform.
 
-### Issue: too many behavioral hits
-- Add parent-process constraints.
-- Require stronger commandline context.
-- Scope to intended endpoint population.
+### If results are too noisy
+1. Add stricter process conditions.
+2. Add parent-process conditions.
+3. Filter obvious benign software-updater patterns.
 
-### Issue: correlation empty
-- Confirm each signal independently before correlation.
-- Increase time window temporarily.
-- Verify grouping key (host identity consistency).
-
-### Issue: query parity mismatch
-- Re-check schema crosswalk.
-- Compare operators and casting behavior.
+### If correlation returns nothing
+1. Validate each signal separately.
+2. Widen window to 60m.
+3. Re-test and narrow down again.
 
 ---
 
-## 9) Optional extension tasks (advanced)
-1. Create a weighted risk score model:
-   - package hit = low-medium,
-   - process behavior = medium,
-   - C2 + artifact = high.
-2. Add allowlist logic for known benign admin scripts.
-3. Add detection metadata fields:
-   - confidence,
-   - severity,
-   - triage owner,
-   - ATT&CK tags.
-4. Draft a production deployment plan with rollback.
-
----
-
-## 10) Submission packaging suggestion
+## 11) Submission packaging suggestion
 ```
 submission/
   queries/
@@ -415,6 +457,40 @@ submission/
     comparison.md
     attack-mapping.md
 ```
+
+---
+
+## 12) Mini submission template (copy/paste)
+
+### Environment
+- Splunk instance:
+- Kibana space:
+- Time range:
+
+### IOC results summary
+- Hosts:
+- Users:
+- First seen:
+- Last seen:
+
+### Behavioral results summary
+- Query tuning changes:
+- Before count:
+- After count:
+
+### Correlation summary
+- Window used:
+- Correlated hosts:
+- Why high confidence:
+
+### ATT&CK mappings
+- (paste table)
+
+### SPL vs ES|QL comparison
+- Precision:
+- Performance:
+- Maintainability:
+- Recommendation:
 
 ---
 
