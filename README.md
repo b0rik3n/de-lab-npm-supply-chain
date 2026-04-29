@@ -1,4 +1,4 @@
-# detection-engineering-demo
+# de-lab-npm-supply-chain
 
 Practical detection engineering lab where students build equivalent detections in **Splunk SPL** and **Elastic ES|QL** and compare tradeoffs.
 
